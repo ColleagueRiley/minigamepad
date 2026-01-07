@@ -10,7 +10,7 @@ PLATFORM = $(shell uname -s)
 EXAMPLES_SOURCES = $(filter-out examples/rgfw_gamepad.c, $(wildcard examples/*.c))
 EXAMPLES  = $(EXAMPLES_SOURCES:.c=)
 
-EXTRA_EXAMPLES = examples/rgfw_gamepad
+EXTRA_EXAMPLES = examples/rgfw_gamepad examples/rumble
 OUTPUT = 
 
 ifeq ($(CC), emcc)
@@ -40,6 +40,9 @@ ifneq ($(CC),emcc)
 else
 	@echo this example doesn not yet support WASM
 endif
+
+examples/rumble: examples/rumble.c minigamepad.h
+	$(CC) -I./ $< $(LIBS) -o $@
 
 $(EXAMPLES): %: %.c minigamepad.h 
 	$(CC) -std=c89 $(WARNINGS) -I. $< $(LIBS) -o $@$(OUTPUT)
