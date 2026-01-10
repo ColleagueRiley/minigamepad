@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #define MG_IMPLEMENTATION
 #include "minigamepad.h"
 
@@ -9,7 +10,7 @@
 
 void sleep_ms(int ms) {
 #ifdef _WIN32
-    Sleep(ms);
+    Sleep((DWORD)ms);
 #else
     usleep((useconds_t)(ms * 1000));
 #endif

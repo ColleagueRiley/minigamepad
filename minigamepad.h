@@ -659,6 +659,17 @@ struct mg_gamepads {
 
 #ifdef MG_IMPLEMENTATION
 
+#ifdef MG_WINDOWS
+    #include <windows.h>
+    #include <xinput.h>
+    typedef DWORD (* PFN_XInputSetState)(DWORD,XINPUT_VIBRATION*);
+    PFN_XInputSetState XInputSetStateSrc;
+#endif
+
+#ifdef MG_LINUX
+    #include <unistd.h>
+#endif
+
 #ifdef MG_MACOS
     #include <IOKit/IOKitLib.h>
     #include <IOKit/hid/IOHIDManager.h>
@@ -735,7 +746,7 @@ void mg_gamepad_rumble(mg_gamepad* gamepad, float low, float high) {
         XINPUT_VIBRATION vibration;
         vibration.wLeftMotorSpeed = (WORD)(low * 65535.0f);
         vibration.wRightMotorSpeed = (WORD)(high * 65535.0f);
-        XInputSetStateSrc(gamepad->src.xinput_index - 1, &vibration);
+        (XInputSetStateSrc)(gamepad->src.xinput_index - 1, &vibration);
     }
 #elif defined(MG_MACOS)
     if (gamepad->connected == MG_FALSE) return;
@@ -1285,7 +1296,7 @@ mg_bool mg_gamepads_poll_platform(mg_gamepads* gamepads, mg_events* events) {
     size = read(gamepads->src.inotify, buffer, sizeof(buffer));
 
     while (size > offset) {
-        const struct inotify_event* e = (struct inotify_event*) (buffer + offset);
+        const struct inotify_event* e = (struct inotify_event*) (void*) (buffer + offset);
 
         offset += (mg_ssize_t)sizeof(struct inotify_event) + e->len;
 
@@ -1388,7 +1399,7 @@ mg_bool mg_gamepad_update_platform(mg_gamepad* gamepad, mg_events* events) {
 					break;
 				}
 
-				if (range) {
+				if (range != 0.0f) {
 					/* Normalize to 0.0 -> 1.0 */
 					normalized = (normalized - (float)info.minimum) / range;
 					/* Normalize to -1.0 -> 1.0 */
@@ -1575,7 +1586,6 @@ MG_API void mg_xinput_fetch_gamepads(mg_gamepads* gamepads, mg_events* events);
 
 mg_gamepad* mg_xinput_list[XUSER_MAX_COUNT];
 typedef DWORD (* PFN_XInputGetState)(DWORD,XINPUT_STATE*);
-typedef DWORD (* PFN_XInputSetState)(DWORD,XINPUT_VIBRATION*);
 typedef DWORD (* PFN_XInputGetCapabilities)(DWORD,DWORD,XINPUT_CAPABILITIES*);
 typedef DWORD (* PFN_XInputGetKeystroke)(DWORD, DWORD, PXINPUT_KEYSTROKE);
 typedef HRESULT (WINAPI * PFN_DirectInput8Create)(HINSTANCE,DWORD,REFIID,LPVOID*,LPUNKNOWN);
@@ -1769,7 +1779,7 @@ BOOL CALLBACK DirectInputEnumDevicesCallback(LPCDIDEVICEINSTANCE inst, LPVOID us
         return DIENUM_CONTINUE;
     }
 
-   if (!WideCharToMultiByte(CP_UTF8, 0, (const wchar_t*)inst->tszInstanceName, -1, gamepad->name, sizeof(gamepad->name), NULL, NULL)) {
+   if (!WideCharToMultiByte(CP_UTF8, 0, (const wchar_t*) (const void*) inst->tszInstanceName, -1, gamepad->name, sizeof(gamepad->name), NULL, NULL)) {
         mg_gamepad_release(gamepads, gamepad);
         return DIENUM_STOP;
     }
@@ -1952,7 +1962,7 @@ void mg_gamepads_init_platform(mg_gamepads* gamepads) {
 
 	RegisterClassW(&Class);
 
-	gamepads->src.dummy_win = CreateWindowW(Class.lpszClassName, (wchar_t*)"", 0, 0, 0, 0, 0, 0, 0, hInstance, 0);
+	gamepads->src.dummy_win = CreateWindowW(Class.lpszClassName, (wchar_t*) (void*) L"", 0, 0, 0, 0, 0, 0, 0, hInstance, 0);
 
 	SetPropW(gamepads->src.dummy_win, L"gamepads", gamepads);
 }
@@ -2438,12 +2448,14 @@ void mg_osx_device_added_callback(void* context, IOReturn result, void *sender, 
         }
     }
 
-	    	gamepad->src.events = (void*)&gamepads->events;
-	        gamepad->src.device = (void*)device;
-	    
-	    	mg_handle_connection_event(&gamepads->events, MG_TRUE, gamepad);
-	        CFRelease(elements);
-	    }void mg_osx_device_removed_callback(void *context, IOReturn result, void *sender, IOHIDDeviceRef device) {
+	  gamepad->src.events = (void*)&gamepads->events;
+	  gamepad->src.device = (void*)device;
+
+	  mg_handle_connection_event(&gamepads->events, MG_TRUE, gamepad);
+	  CFRelease(elements);
+}
+
+void mg_osx_device_removed_callback(void *context, IOReturn result, void *sender, IOHIDDeviceRef device) {
     mg_gamepads* gamepads = (mg_gamepads*)context;
     mg_gamepad* cur = NULL;
 
