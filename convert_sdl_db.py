@@ -31,8 +31,10 @@ def main():
     first = True
     for platform, macro in PLATFORMS.items():
         if not mappings[platform]: continue
-        lines.append(f"#if{' defined(' + macro + ')' if first else ' defined(' + macro + ')'}")
-        if not first: lines[-1] = lines[-1].replace("#if", "#elif")
+        if first:
+            lines.append(f"#ifdef {macro}")
+        else:
+            lines.append(f"#elif defined({macro})")
         first = False
         for m in mappings[platform]:
             escaped_m = m.replace('"', '\\"')
