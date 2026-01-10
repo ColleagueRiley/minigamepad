@@ -4,8 +4,8 @@ import sys, urllib.request
 URL = "https://raw.githubusercontent.com/mdqinc/SDL_GameControllerDB/refs/heads/master/gamecontrollerdb.txt"
 HEADER = "minigamepad.h"
 PLATFORMS = {
-    "Windows": "MG_WINDOWS", "Mac OS X": "MG_MACOS", "Linux": "MG_LINUX",
-    "Android": "__ANDROID_API__", "iOS": "TARGET_OS_IPHONE"
+    "Windows": "_WIN32", "Mac OS X": "__APPLE__", "Linux": "__linux__",
+    "Android": "__ANDROID__", "iOS": "TARGET_OS_IPHONE"
 }
 
 def get_content():
@@ -35,7 +35,7 @@ def main():
         if not first: lines[-1] = lines[-1].replace("#if", "#elif")
         first = False
         for m in mappings[platform]:
-            escaped_m = m.replace('"', '\"')
+            escaped_m = m.replace('"', '\\"')
              # The code checked into minigamepad.h doesn't use indentation. To
              # minimize my PR's diff, I match it here.
             lines.append(f'"{escaped_m},",')
