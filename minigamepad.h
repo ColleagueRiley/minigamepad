@@ -2190,9 +2190,9 @@ void mg_osx_input_value_changed_callback(void *context, IOReturn result, void *s
     switch (usagePage) {
 		case kHIDPage_Button: {
 			mg_button btn = mg_get_gamepad_button(gamepad, (u8)usage);
-            if (btn == 0)
+            if (btn == MG_BUTTON_UNKNOWN)
 			    btn = mg_get_gamepad_button_platform(usage);
-            if (btn == 0)
+            if (btn == MG_BUTTON_UNKNOWN)
                 break;
 
 			mg_handle_button_event((mg_events*)gamepad->src.events, btn, MG_BOOL(intValue), gamepad);
@@ -2202,9 +2202,9 @@ void mg_osx_input_value_changed_callback(void *context, IOReturn result, void *s
 			CFIndex logicalMin = IOHIDElementGetLogicalMin(element);
 			CFIndex logicalMax = IOHIDElementGetLogicalMax(element);
 			mg_axis btn = mg_get_gamepad_axis(gamepad, (u8)usage);
-            if (btn == 0)
+            if (btn == MG_AXIS_UNKNOWN)
 			    btn = mg_get_gamepad_axis_platform(usage);
-            if (btn == 0)
+            if (btn == MG_AXIS_UNKNOWN)
                 break;
 
 			if (logicalMax <= logicalMin) return;
@@ -2305,9 +2305,9 @@ void mg_osx_device_added_callback(void* context, IOReturn result, void *sender, 
         switch (page) {
             case kHIDPage_Button: {
                 mg_button btn = mg_get_gamepad_button(gamepad, (u8)elm_usage);
-                if (btn == 0)
+                if (btn == MG_BUTTON_UNKNOWN)
                     btn = mg_get_gamepad_button_platform(elm_usage);
-                if (btn == 0)
+                if (btn == MG_BUTTON_UNKNOWN)
                     break;
 
                 gamepad->buttons[btn].prev = 0;
@@ -2317,9 +2317,9 @@ void mg_osx_device_added_callback(void* context, IOReturn result, void *sender, 
             }
             case kHIDPage_GenericDesktop: {
                 mg_axis btn = mg_get_gamepad_axis(gamepad, (u8)elm_usage);
-                if (btn == 0)
+                if (btn == MG_AXIS_UNKNOWN)
                     btn = mg_get_gamepad_axis_platform(elm_usage);
-                if (btn == 0)
+                if (btn == MG_AXIS_UNKNOWN)
                     break;
 
                 gamepad->axes[btn].value = 0.0f;
