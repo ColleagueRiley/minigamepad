@@ -2245,6 +2245,8 @@ void mg_osx_device_added_callback(void* context, IOReturn result, void *sender, 
         return;
     }
 
+    gamepad->src.device = (void*)device;
+
     IOHIDDeviceRegisterInputValueCallback(device, mg_osx_input_value_changed_callback, gamepad);
 
     deviceName = (CFStringRef)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductKey));
@@ -2397,6 +2399,7 @@ void mg_gamepads_init_platform(mg_gamepads* gamepads) {
 
 mg_bool mg_gamepads_poll_platform(mg_gamepads* gamepads, mg_events* events) {
     MG_UNUSED(gamepads); MG_UNUSED(events);
+    while (CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, MG_TRUE) == kCFRunLoopRunHandledSource);
     return MG_FALSE;
 }
 
