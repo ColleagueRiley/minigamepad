@@ -579,6 +579,7 @@ struct mg_gamepad_src {
 struct mg_gamepad_src {
 	void* device;
 	void* events;
+    u8 absMap[64];
 };
 
 #elif defined(MG_WASM)
@@ -2189,10 +2190,10 @@ void mg_osx_input_value_changed_callback(void *context, IOReturn result, void *s
 
     switch (usagePage) {
 		case kHIDPage_Button: {
-			mg_button btn = mg_get_gamepad_button(gamepad, (u8)usage);
-            if (btn == 0)
+			mg_button btn = mg_get_gamepad_button(gamepad, (u8)usage - 1);
+            if (btn == MG_BUTTON_UNKNOWN)
 			    btn = mg_get_gamepad_button_platform(usage);
-            if (btn == 0)
+            if (btn == MG_BUTTON_UNKNOWN)
                 break;
 
 			mg_handle_button_event((mg_events*)gamepad->src.events, btn, MG_BOOL(intValue), gamepad);
@@ -2201,10 +2202,15 @@ void mg_osx_input_value_changed_callback(void *context, IOReturn result, void *s
 		case kHIDPage_GenericDesktop: {
 			CFIndex logicalMin = IOHIDElementGetLogicalMin(element);
 			CFIndex logicalMax = IOHIDElementGetLogicalMax(element);
-			mg_axis btn = mg_get_gamepad_axis(gamepad, (u8)usage);
-            if (btn == 0)
+            mg_axis btn = MG_AXIS_UNKNOWN;
+            
+            if (usage < 64 && gamepad->src.absMap[usage] != 0xFF) {
+                btn = mg_get_gamepad_axis(gamepad, gamepad->src.absMap[usage]);
+            }
+
+            if (btn == MG_AXIS_UNKNOWN)
 			    btn = mg_get_gamepad_axis_platform(usage);
-            if (btn == 0)
+            if (btn == MG_AXIS_UNKNOWN)
                 break;
 
 			if (logicalMax <= logicalMin) return;
@@ -2284,6 +2290,8 @@ void mg_osx_device_added_callback(void* context, IOReturn result, void *sender, 
     gamepad->mapping = mg_gamepad_find_valid_mapping(gamepad);
     gamepad->connected = MG_TRUE;
 
+    MG_MEMSET(gamepad->src.absMap, 0xFF, sizeof(gamepad->src.absMap));
+
     for (i = 0;  i < CFArrayGetCount(elements);  i++) {
         u32 elm_usage = 0, page = 0;
         IOHIDElementType type;
@@ -2306,10 +2314,10 @@ void mg_osx_device_added_callback(void* context, IOReturn result, void *sender, 
 
         switch (page) {
             case kHIDPage_Button: {
-                mg_button btn = mg_get_gamepad_button(gamepad, (u8)elm_usage);
-                if (btn == 0)
+                mg_button btn = mg_get_gamepad_button(gamepad, (u8)elm_usage - 1);
+                if (btn == MG_BUTTON_UNKNOWN)
                     btn = mg_get_gamepad_button_platform(elm_usage);
-                if (btn == 0)
+                if (btn == MG_BUTTON_UNKNOWN)
                     break;
 
                 gamepad->buttons[btn].prev = 0;
@@ -2317,16 +2325,43 @@ void mg_osx_device_added_callback(void* context, IOReturn result, void *sender, 
                 gamepad->buttons[btn].supported = MG_TRUE;
                 break;
             }
-            case kHIDPage_GenericDesktop: {
-                mg_axis btn = mg_get_gamepad_axis(gamepad, (u8)elm_usage);
-                if (btn == 0)
-                    btn = mg_get_gamepad_axis_platform(elm_usage);
-                if (btn == 0)
-                    break;
+        }
+    }
 
-                gamepad->axes[btn].value = 0.0f;
-                gamepad->axes[btn].supported = MG_TRUE;
-                break;
+    /* process axes (sorted by usage for SDL compatibility) */
+    {
+        u32 u;
+        u8 axisCount = 0;
+        for (u = 0; u < 64; u++) {
+            for (i = 0; i < CFArrayGetCount(elements); i++) {
+                u32 elm_usage = 0, page = 0;
+                IOHIDElementType type;
+                IOHIDElementRef native = (IOHIDElementRef)
+                    CFArrayGetValueAtIndex(elements, i);
+                
+                if (CFGetTypeID(native) != IOHIDElementGetTypeID()) continue;
+
+                type = IOHIDElementGetType(native);
+                if ((type != kIOHIDElementTypeInput_Axis) &&
+                    (type != kIOHIDElementTypeInput_Button) &&
+                    (type != kIOHIDElementTypeInput_Misc)) continue;
+
+                elm_usage = IOHIDElementGetUsage(native);
+                page = IOHIDElementGetUsagePage(native);
+
+                if (page == kHIDPage_GenericDesktop && elm_usage == u) {
+                    mg_axis btn = mg_get_gamepad_axis(gamepad, axisCount);
+                    if (btn == MG_AXIS_UNKNOWN)
+                        btn = mg_get_gamepad_axis_platform(elm_usage);
+                    
+                    if (btn != MG_AXIS_UNKNOWN) {
+                        gamepad->src.absMap[u] = axisCount;
+                        gamepad->axes[btn].value = 0.0f;
+                        gamepad->axes[btn].supported = MG_TRUE;
+                    }
+                    
+                    axisCount++;
+                }
             }
         }
     }
