@@ -2434,7 +2434,6 @@ void mg_gamepads_init_platform(mg_gamepads* gamepads) {
 
 mg_bool mg_gamepads_poll_platform(mg_gamepads* gamepads, mg_events* events) {
     MG_UNUSED(gamepads); MG_UNUSED(events);
-    while (CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, MG_TRUE) == kCFRunLoopRunHandledSource);
     return MG_FALSE;
 }
 
