@@ -2704,13 +2704,17 @@ typedef struct mg_field {
 } mg_field;
 
 
+#define BUTTON_FIELDS_START 1
+#define AXIS_FIELDS_START 18
+
 MG_API mg_bool parseMapping(mg_mapping* mapping, const char* string);
 mg_bool parseMapping(mg_mapping* mapping, const char* string) {
     const char* substr = string;
     mg_size_t i, length, len;
     mg_field fields[] = {
         { "platform", 8,     0, NULL },
-        { "a", 1,             MG_BUTTON_SOUTH , NULL},
+
+        [BUTTON_FIELDS_START] = { "a", 1,             MG_BUTTON_SOUTH , NULL},
         { "b", 1,           MG_BUTTON_EAST , NULL},
         { "x", 1,            MG_BUTTON_WEST , NULL},
         { "y", 1,            MG_BUTTON_NORTH , NULL},
@@ -2728,7 +2732,7 @@ mg_bool parseMapping(mg_mapping* mapping, const char* string) {
         { "lefttrigger", 11,   MG_BUTTON_LEFT_TRIGGER , NULL},
         { "righttrigger", 12,  MG_BUTTON_RIGHT_TRIGGER , NULL },
 
-        { "lefttrigger", 11,   MG_AXIS_LEFT_TRIGGER, NULL},
+        [AXIS_FIELDS_START] = { "lefttrigger", 11,   MG_AXIS_LEFT_TRIGGER, NULL},
         { "righttrigger", 12,  MG_AXIS_RIGHT_TRIGGER, NULL },
         { "leftx",  5,       MG_AXIS_LEFT_X, NULL },
         { "lefty",  5,       MG_AXIS_LEFT_Y, NULL } ,
@@ -2738,11 +2742,11 @@ mg_bool parseMapping(mg_mapping* mapping, const char* string) {
 
     len = (sizeof(fields) / sizeof(mg_field));
 
-    for (i = 1; i < len - 8; i++) {
+    for (i = BUTTON_FIELDS_START; i < AXIS_FIELDS_START; i++) {
         fields[i].element = &mapping->buttons[fields[i].val];
     }
 
-    for (i = len - 8; i < len; i++) {
+    for (i = AXIS_FIELDS_START; i < len; i++) {
         fields[i].element = &mapping->axes[fields[i].val];
     }
 
