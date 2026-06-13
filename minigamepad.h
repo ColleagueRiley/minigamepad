@@ -2702,47 +2702,51 @@ typedef struct mg_field {
     u8 val;
     mg_element* element;
 } mg_field;
-
+#define MG_FIELD(name, value) { name, sizeof(name), value, NULL }
 
 MG_API mg_bool parseMapping(mg_mapping* mapping, const char* string);
 mg_bool parseMapping(mg_mapping* mapping, const char* string) {
     const char* substr = string;
-    mg_size_t i, length, len;
-    mg_field fields[] = {
-        { "platform", 8,     0, NULL },
-        { "a", 1,             MG_BUTTON_SOUTH , NULL},
-        { "b", 1,           MG_BUTTON_EAST , NULL},
-        { "x", 1,            MG_BUTTON_WEST , NULL},
-        { "y", 1,            MG_BUTTON_NORTH , NULL},
-        { "back", 4,          MG_BUTTON_BACK , NULL},
-        { "start", 5,         MG_BUTTON_START , NULL},
-        { "guide", 5,         MG_BUTTON_GUIDE , NULL},
-        { "leftshoulder", 12,  MG_BUTTON_LEFT_SHOULDER , NULL},
-        { "rightshoulder", 13, MG_BUTTON_RIGHT_SHOULDER , NULL},
-        { "leftstick", 9,     MG_BUTTON_LEFT_STICK , NULL},
-        { "rightstick", 10,    MG_BUTTON_RIGHT_STICK , NULL},
-        { "dpup",   4,       MG_BUTTON_DPAD_UP , NULL},
-        { "dpright", 7,       MG_BUTTON_DPAD_RIGHT , NULL},
-        { "dpdown", 6,       MG_BUTTON_DPAD_DOWN , NULL},
-        { "dpleft", 6,        MG_BUTTON_DPAD_LEFT , NULL},
-        { "lefttrigger", 11,   MG_BUTTON_LEFT_TRIGGER , NULL},
-        { "righttrigger", 12,  MG_BUTTON_RIGHT_TRIGGER , NULL },
+    mg_size_t i, length; 
 
-        { "lefttrigger", 11,   MG_AXIS_LEFT_TRIGGER, NULL},
-        { "righttrigger", 12,  MG_AXIS_RIGHT_TRIGGER, NULL },
-        { "leftx",  5,       MG_AXIS_LEFT_X, NULL },
-        { "lefty",  5,       MG_AXIS_LEFT_Y, NULL } ,
-        { "rightx", 6,       MG_AXIS_RIGHT_X, NULL},
-        { "righty", 6,        MG_AXIS_RIGHT_Y, NULL }
+    mg_field fields[] = {
+        MG_FIELD("platform", 0),
+        MG_FEILD("a", MG_BUTTON_SOUTH),
+        MG_FEILD("b", MG_BUTTON_EAST),
+        MG_FEILD("x", MG_BUTTON_WEST),
+        MG_FEILD("y", MG_BUTTON_NORTH),
+        MG_FEILD("back", MG_BUTTON_BACK),
+        MG_FEILD("start", MG_BUTTON_START),
+        MG_FEILD("guide", MG_BUTTON_GUIDE),
+        MG_FEILD("leftshoulder", MG_BUTTON_LEFT_SHOULDER),
+        MG_FEILD("rightshoulder", MG_BUTTON_RIGHT_SHOULDER),
+        MG_FEILD("leftstick", MG_BUTTON_LEFT_STICK),
+        MG_FEILD("rightstick", MG_BUTTON_RIGHT_STICK),
+        MG_FEILD("dpup", MG_BUTTON_DPAD_UP),
+        MG_FEILD("dpright", MG_BUTTON_DPAD_RIGHT),
+        MG_FEILD("dpdown", MG_BUTTON_DPAD_DOWN),
+        MG_FEILD("dpleft", MG_BUTTON_DPAD_LEFT),
+        MG_FEILD("lefttrigger", MG_BUTTON_LEFT_TRIGGER),
+        MG_FEILD("righttrigger", MG_BUTTON_RIGHT_TRIGGER),
+
+        MG_FEILD("lefttrigger", MG_AXIS_LEFT_TRIGGER),
+        MG_FEILD("righttrigger", MG_AXIS_RIGHT_TRIGGER),
+        MG_FEILD("leftx",  MG_AXIS_LEFT_X),
+        MG_FEILD("lefty",  MG_AXIS_LEFT_Y),
+        MG_FEILD("rightx", MG_AXIS_RIGHT_X),
+        MG_FEILD("righty", MG_AXIS_RIGHT_Y)
     };
 
-    len = (sizeof(fields) / sizeof(mg_field));
+    size_t fields_len = (sizeof(fields) / sizeof(mg_field));
+    
+    size_t axes_len = 6; 
+    size_t buttons_len = fields_len - axes_len;
 
-    for (i = 1; i < len - 8; i++) {
+    for (i = 0; i < buttons_len; i++) {
         fields[i].element = &mapping->buttons[fields[i].val];
     }
 
-    for (i = len - 8; i < len; i++) {
+    for (i = buttons_len; i < fields_len; i++) {
         fields[i].element = &mapping->axes[fields[i].val];
     }
 
@@ -2764,13 +2768,13 @@ mg_bool parseMapping(mg_mapping* mapping, const char* string) {
 
     while (substr[0]) {
         /* TODO: Implement output modifiers */
-        char mod = 0;;
+        char mod = 0;
         if (substr[0] == '+' || substr[0] == '-') {
             mod = substr[0];
             substr++;
         }
 
-        for (i = 0;  i < sizeof(fields) / sizeof(fields[0]);  i++) {
+        for (i = 0; i < fields_len;  i++) {
             int8_t minimum = -1;
             int8_t maximum = 1;
             mg_element* e;
@@ -2861,7 +2865,7 @@ mg_bool parseMapping(mg_mapping* mapping, const char* string) {
         substr += MG_STRSPN(substr, ",");
     }
 
-    for (i = 0;  i < 32;  i++) {
+    for (i = 0;  i < 32; i++) {
         if (mapping->guid[i] >= 'A' && mapping->guid[i] <= 'F')
             mapping->guid[i] += 'a' - 'A';
     }
