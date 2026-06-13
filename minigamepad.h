@@ -2865,15 +2865,15 @@ mg_bool parseMapping(mg_mapping* mapping, const char* string) {
         substr += MG_STRSPN(substr, ",");
     }
 
-    for (i = 0;  i < 32; i++) {
+    for (i = 0;  i < (sizeof(mapping->guid) / sizeof(mapping->guid[0])) - 1; i++) {
         if (mapping->guid[i] >= 'A' && mapping->guid[i] <= 'F')
             mapping->guid[i] += 'a' - 'A';
     }
 
-    for (i = 0; i < 255; i++) {
+    for (i = 0; i < (sizeof(mapping->rButtons) / sizeof(mapping->rButtons[0])); i++) {
         mg_size_t y;
         mapping->rButtons[i] = MG_BUTTON_UNKNOWN;
-        for (y = 0; y < 16; y++) {
+        for (y = 0; y < (sizeof(mapping->buttons) / sizeof(mapping->buttons[0])); y++) {
             mg_element e = mapping->buttons[y];
             if (e.index == i) {
                 mapping->rButtons[i] = (mg_button)y;
