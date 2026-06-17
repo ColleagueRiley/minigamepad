@@ -543,6 +543,14 @@ MG_API const char* mg_button_get_name(mg_button button);
 */
 MG_API const char* mg_axis_get_name(mg_axis axis);
 
+/**!
+ * @brief set gamepad rumble
+ * @param gamepad object
+ * @param low frequency motor strength (0.0 - 1.0)
+ * @param high frequency motor strength (0.0 - 1.0)
+*/
+MG_API void mg_gamepad_rumble(mg_gamepad* gamepad, float low, float high);
+
 #endif /* MG_HEADER */
 
 #if (defined(MG_NATIVE) || defined(MG_IMPLEMENTATION)) && !defined(MG_NATIVE_HEADER)
@@ -565,6 +573,7 @@ struct mg_gamepad_src {
     u8 absMap[64];
     struct mg_input_absinfo absInfo[64];
     char full_path[256];
+    i16 ff_effect;
 };
 
 #elif defined(MG_WINDOWS)
@@ -579,6 +588,8 @@ struct mg_gamepad_src {
 struct mg_gamepad_src {
 	void* device;
 	void* events;
+    void* rumble_low;
+    void* rumble_high;
 };
 
 #elif defined(MG_WASM)
@@ -648,6 +659,22 @@ struct mg_gamepads {
 
 #ifdef MG_IMPLEMENTATION
 
+#ifdef MG_WINDOWS
+    #include <windows.h>
+    #include <xinput.h>
+    typedef DWORD (* PFN_XInputSetState)(DWORD,XINPUT_VIBRATION*);
+    PFN_XInputSetState XInputSetStateSrc;
+#endif
+
+#ifdef MG_LINUX
+    #include <unistd.h>
+#endif
+
+#ifdef MG_MACOS
+    #include <IOKit/IOKitLib.h>
+    #include <IOKit/hid/IOHIDManager.h>
+#endif
+
 /* gamepads->src.global API */
 /* find a valid unused gamepad or return NULL */
 MG_API mg_gamepad* mg_gamepad_find(mg_gamepads* gamepads);
@@ -670,6 +697,84 @@ MG_API mg_button mg_get_gamepad_button(mg_gamepad* gamepad, u8 button);
 MG_API mg_axis mg_get_gamepad_axis(mg_gamepad* gamepad, u8 axis);
 MG_API void mg_mappings_init(void);
 /* public/global API implementation */
+
+void mg_gamepad_rumble(mg_gamepad* gamepad, float low, float high) {
+#ifdef MG_LINUX
+    struct ff_effect effect;
+    struct input_event play;
+
+    if (gamepad->connected == MG_FALSE || gamepad->src.fd < 0) return;
+
+    /* Initialize rumble effect if it hasn't been created yet */
+    if (gamepad->src.ff_effect == -1) {
+        MG_MEMSET(&effect, 0, sizeof(struct ff_effect));
+        effect.type = FF_RUMBLE;
+        effect.id = -1;
+        effect.u.rumble.strong_magnitude = 0;
+        effect.u.rumble.weak_magnitude = 0;
+        effect.replay.length = 0;
+        effect.replay.delay = 0;
+
+        /* Upload the new effect to the device */
+        if (ioctl(gamepad->src.fd, EVIOCSFF, &effect) < 0) return;
+        gamepad->src.ff_effect = effect.id;
+    }
+
+    /* Update existing rumble effect magnitudes */
+    MG_MEMSET(&effect, 0, sizeof(struct ff_effect));
+    effect.type = FF_RUMBLE;
+    effect.id = gamepad->src.ff_effect;
+    effect.u.rumble.strong_magnitude = (u16)(low * 0xFFFF);
+    effect.u.rumble.weak_magnitude = (u16)(high * 0xFFFF);
+    effect.replay.length = 0;
+    effect.replay.delay = 0;
+
+    if (ioctl(gamepad->src.fd, EVIOCSFF, &effect) < 0) return;
+
+    /* Send play event to start vibration */
+    MG_MEMSET(&play, 0, sizeof(struct input_event));
+    play.type = EV_FF;
+    play.code = (u16)gamepad->src.ff_effect;
+    play.value = 1;
+
+    if (write(gamepad->src.fd, &play, sizeof(struct input_event)) < 0) { }
+#elif defined(MG_WINDOWS)
+    if (gamepad->connected == MG_FALSE) return;
+
+    /* Use XInput to set vibration motor speeds */
+    if (gamepad->src.xinput_index != 0 && XInputSetStateSrc) {
+        XINPUT_VIBRATION vibration;
+        vibration.wLeftMotorSpeed = (WORD)(low * 65535.0f);
+        vibration.wRightMotorSpeed = (WORD)(high * 65535.0f);
+        (XInputSetStateSrc)(gamepad->src.xinput_index - 1, &vibration);
+    }
+#elif defined(MG_MACOS)
+    if (gamepad->connected == MG_FALSE) return;
+
+    if (gamepad->src.rumble_low) {
+        IOHIDValueRef value;
+        /* Normalize float 0.0-1.0 to 0-65535 or whatever the element expects. 
+           We can assume 0-65535 for generic motors or check logical max.
+           For now, assume standard 16-bit. */
+        int int_value = (int)(low * 65535.0f);
+        
+        /* Create value. timestamp 0 means now. */
+        value = IOHIDValueCreateWithIntegerValue(kCFAllocatorDefault, (IOHIDElementRef)gamepad->src.rumble_low, 0, int_value);
+        IOHIDDeviceSetValue((IOHIDDeviceRef)gamepad->src.device, (IOHIDElementRef)gamepad->src.rumble_low, value);
+        CFRelease(value);
+    }
+
+    if (gamepad->src.rumble_high) {
+        IOHIDValueRef value;
+        int int_value = (int)(high * 65535.0f);
+        value = IOHIDValueCreateWithIntegerValue(kCFAllocatorDefault, (IOHIDElementRef)gamepad->src.rumble_high, 0, int_value);
+        IOHIDDeviceSetValue((IOHIDDeviceRef)gamepad->src.device, (IOHIDElementRef)gamepad->src.rumble_high, value);
+        CFRelease(value);
+    }
+#else
+    MG_UNUSED(gamepad); MG_UNUSED(low); MG_UNUSED(high);
+#endif
+}
 
 mg_bool mg_gamepad_button_is_pressed(mg_gamepad* gamepad, mg_button button) {
     return gamepad->buttons[button].current;
@@ -970,6 +1075,7 @@ mg_gamepad* mg_linux_setup_gamepad(mg_gamepads* gamepads, const char* full_path)
     MG_STRNCPY(gamepad->src.full_path, full_path, 256);
 
     gamepad->src.fd = open(full_path, O_RDWR);
+    gamepad->src.ff_effect = -1;
 
     fd = gamepad->src.fd;
     if (fd <= 0) {
@@ -1190,7 +1296,7 @@ mg_bool mg_gamepads_poll_platform(mg_gamepads* gamepads, mg_events* events) {
     size = read(gamepads->src.inotify, buffer, sizeof(buffer));
 
     while (size > offset) {
-        const struct inotify_event* e = (struct inotify_event*) (buffer + offset);
+        const struct inotify_event* e = (struct inotify_event*) (void*) (buffer + offset);
 
         offset += (mg_ssize_t)sizeof(struct inotify_event) + e->len;
 
@@ -1293,7 +1399,7 @@ mg_bool mg_gamepad_update_platform(mg_gamepad* gamepad, mg_events* events) {
 					break;
 				}
 
-				if (range) {
+				if (range != 0.0f) {
 					/* Normalize to 0.0 -> 1.0 */
 					normalized = (normalized - (float)info.minimum) / range;
 					/* Normalize to -1.0 -> 1.0 */
@@ -1492,6 +1598,7 @@ HINSTANCE mg_dinput_dll = NULL;
 PFN_GameInputCreate GameInputCreateSrc = NULL;
 
 PFN_XInputGetState XInputGetStateSrc = NULL;
+PFN_XInputSetState XInputSetStateSrc = NULL;
 PFN_XInputGetKeystroke XInputGetKeystrokeSrc = NULL;
 PFN_XInputGetCapabilities XInputGetCapabilitiesSrc = NULL;
 PFN_DirectInput8Create DInput8CreateSrc = NULL;
@@ -1672,7 +1779,7 @@ BOOL CALLBACK DirectInputEnumDevicesCallback(LPCDIDEVICEINSTANCE inst, LPVOID us
         return DIENUM_CONTINUE;
     }
 
-   if (!WideCharToMultiByte(CP_UTF8, 0, (const wchar_t*)inst->tszInstanceName, -1, gamepad->name, sizeof(gamepad->name), NULL, NULL)) {
+   if (!WideCharToMultiByte(CP_UTF8, 0, (const wchar_t*) (const void*) inst->tszInstanceName, -1, gamepad->name, sizeof(gamepad->name), NULL, NULL)) {
         mg_gamepad_release(gamepads, gamepad);
         return DIENUM_STOP;
     }
@@ -1813,6 +1920,7 @@ void mg_gamepads_init_platform(mg_gamepads* gamepads) {
             mg_xinput_dll = LoadLibraryA(names[i]);
             if (mg_xinput_dll) {
                 XInputGetStateSrc = (PFN_XInputGetState)(mg_proc)GetProcAddress(mg_xinput_dll, "XInputGetState");
+                XInputSetStateSrc = (PFN_XInputSetState)(mg_proc)GetProcAddress(mg_xinput_dll, "XInputSetState");
                 XInputGetKeystrokeSrc = (PFN_XInputGetKeystroke)(mg_proc)GetProcAddress(mg_xinput_dll, "XInputGetKeystroke");
                 XInputGetCapabilitiesSrc =  (PFN_XInputGetCapabilities)(mg_proc)GetProcAddress(mg_xinput_dll, "XInputGetCapabilities");
             }
@@ -1854,7 +1962,7 @@ void mg_gamepads_init_platform(mg_gamepads* gamepads) {
 
 	RegisterClassW(&Class);
 
-	gamepads->src.dummy_win = CreateWindowW(Class.lpszClassName, (wchar_t*)"", 0, 0, 0, 0, 0, 0, 0, hInstance, 0);
+	gamepads->src.dummy_win = CreateWindowW(Class.lpszClassName, (wchar_t*) (void*) L"", 0, 0, 0, 0, 0, 0, 0, hInstance, 0);
 
 	SetPropW((HWND)gamepads->src.dummy_win, L"gamepads", gamepads);
 }
@@ -2293,7 +2401,8 @@ void mg_osx_device_added_callback(void* context, IOReturn result, void *sender, 
         type = IOHIDElementGetType(native);
         if ((type != kIOHIDElementTypeInput_Axis) &&
             (type != kIOHIDElementTypeInput_Button) &&
-            (type != kIOHIDElementTypeInput_Misc))
+            (type != kIOHIDElementTypeInput_Misc) &&
+            (type != kIOHIDElementTypeOutput))
         {
             continue;
         }
@@ -2301,6 +2410,16 @@ void mg_osx_device_added_callback(void* context, IOReturn result, void *sender, 
 
         elm_usage = IOHIDElementGetUsage(native);
         page = IOHIDElementGetUsagePage(native);
+
+        if (type == kIOHIDElementTypeOutput) {
+            /* Heuristic: Assume first output is low/left, second is high/right */
+            if (gamepad->src.rumble_low == NULL) {
+                gamepad->src.rumble_low = (void*)native;
+            } else if (gamepad->src.rumble_high == NULL) {
+                gamepad->src.rumble_high = (void*)native;
+            }
+            continue;
+        }
 
         switch (page) {
             case kHIDPage_Button: {
@@ -2329,9 +2448,11 @@ void mg_osx_device_added_callback(void* context, IOReturn result, void *sender, 
         }
     }
 
-	gamepad->src.events = (void*)&gamepads->events;
-	mg_handle_connection_event(&gamepads->events, MG_TRUE, gamepad);
-    CFRelease(elements);
+	  gamepad->src.events = (void*)&gamepads->events;
+	  gamepad->src.device = (void*)device;
+
+	  mg_handle_connection_event(&gamepads->events, MG_TRUE, gamepad);
+	  CFRelease(elements);
 }
 
 void mg_osx_device_removed_callback(void *context, IOReturn result, void *sender, IOHIDDeviceRef device) {
@@ -2410,8 +2531,8 @@ mg_bool mg_gamepad_update_platform(mg_gamepad* gamepad, mg_events* events) {
 }
 
 
-void mg_gamepad_release_platform(mg_gamepad* gamepads) {
-    MG_UNUSED(gamepads);
+void mg_gamepad_release_platform(mg_gamepad* gamepad) {
+    MG_UNUSED(gamepad);
 }
 
 mg_button mg_get_gamepad_button_platform(u32 button) {
